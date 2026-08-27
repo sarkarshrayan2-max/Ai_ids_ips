@@ -1,0 +1,18 @@
+[project]
+name = "ai-ids-ips"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "joblib>=1.5.3",
+    "numpy>=2.4.6",
+    "pandas>=3.0.5",
+    "plotly>=7.0.0",
+    "scapy>=2.7.0",
+    "scikit-learn>=1.9.0",
+    "streamlit>=1.62.0",
+    "xgboost>=3.2.0",
+]
+
+
