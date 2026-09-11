@@ -80,15 +80,34 @@ def compute_risk(
         + history_score * HISTORY_WEIGHT
     )
 
-    independent_evidence = max(
-        anomaly_score * INDEPENDENT_ANOMALY_WEIGHT,
-        behavior_score * INDEPENDENT_BEHAVIOR_WEIGHT,
-        (
-            anomaly_score * 45.0
-            + behavior_score * 45.0
-            + history_score * 10.0
-        ),
-    )
+    if ml_prediction == "Normal":
+        if anomaly_score < 0.85:
+            anomaly_component = (anomaly_score ** 2.0) * 30.0
+        else:
+            anomaly_component = anomaly_score * INDEPENDENT_ANOMALY_WEIGHT
+    else:
+        anomaly_component = anomaly_score * INDEPENDENT_ANOMALY_WEIGHT
+
+    behavior_component = behavior_score * INDEPENDENT_BEHAVIOR_WEIGHT
+
+    strong_anomaly = anomaly_score >= 0.85
+    strong_behavior = behavior_score >= 0.60
+
+    if ml_prediction == "Normal" and strong_anomaly and strong_behavior:
+        independent_evidence = min(
+            100.0,
+            (anomaly_score * 55.0) + (behavior_score * 55.0),
+        )
+    else:
+        independent_evidence = max(
+            anomaly_component,
+            behavior_component,
+            (
+                anomaly_score * 45.0
+                + behavior_score * 45.0
+                + history_score * 10.0
+            ),
+        )
 
     risk = max(weighted_risk, independent_evidence)
 
