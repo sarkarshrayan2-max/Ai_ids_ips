@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
@@ -34,6 +35,16 @@ scaler = joblib.load(
 label_encoder = joblib.load(
     MODEL_DIR / "label_encoder.pkl"
 )
+
+CALIBRATION_PATH = MODEL_DIR / "anomaly_calibration.json"
+if CALIBRATION_PATH.exists():
+    with open(CALIBRATION_PATH, "r", encoding="utf-8") as f:
+        ANOMALY_CALIBRATION = json.load(f)
+else:
+    ANOMALY_CALIBRATION = {
+        "low_score": -0.5,
+        "high_score": 0.0,
+    }
 
 
 FEATURES = [
@@ -86,6 +97,35 @@ def _calculate_history_score(source_ip: str) -> float:
     )
 
 
+def _calibrated_anomaly_score(raw_score: float) -> float:
+    low_score = float(
+        ANOMALY_CALIBRATION["low_score"]
+    )
+
+    high_score = float(
+        ANOMALY_CALIBRATION["high_score"]
+    )
+
+    if high_score <= low_score:
+        return 0.0
+
+    score = (
+        high_score - raw_score
+    ) / (
+        high_score - low_score
+    )
+
+    return float(
+        max(
+            0.0,
+            min(
+                1.0,
+                score,
+            ),
+        )
+    )
+
+
 def analyze_and_record_flow(flow: dict) -> dict:
 
     init_db()
@@ -120,12 +160,8 @@ def analyze_and_record_flow(flow: dict) -> dict:
         )[0]
     )
 
-    anomaly_score = float(
-        np.clip(
-            (0.0 - raw_anomaly) / 0.5,
-            0.0,
-            1.0,
-        )
+    anomaly_score = _calibrated_anomaly_score(
+        raw_anomaly
     )
 
     behavior_score, indicators = (

@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from sklearn.ensemble import IsolationForest
@@ -31,7 +32,6 @@ DATA = (
 )
 
 MODEL_DIR = ROOT / "models"
-
 
 FEATURES = [
     "destination_port",
@@ -137,6 +137,16 @@ def train():
         ["Normal"]
     )[0]
 
+    normal_train = X_train[
+        y_train == normal_id
+    ]
+
+    normal_calibration, _ = train_test_split(
+        normal_train,
+        test_size=0.2,
+        random_state=42,
+    )
+
     isolation_forest = IsolationForest(
         n_estimators=180,
         contamination=0.03,
@@ -144,9 +154,46 @@ def train():
     )
 
     isolation_forest.fit(
-        X_train[
-            y_train == normal_id
-        ]
+        normal_train
+    )
+
+    calibration_scores = isolation_forest.score_samples(
+        normal_calibration
+    )
+
+    low_score = float(
+        np.percentile(
+            calibration_scores,
+            2.5,
+        )
+    )
+
+    high_score = float(
+        np.percentile(
+            calibration_scores,
+            97.5,
+        )
+    )
+
+    if high_score <= low_score:
+        high_score = low_score + 1e-6
+
+    anomaly_calibration = {
+        "low_score": low_score,
+        "high_score": high_score,
+        "normal_false_positive_percentile": 2.5,
+    }
+
+    calibration_path = (
+        MODEL_DIR
+        / "anomaly_calibration.json"
+    )
+
+    calibration_path.write_text(
+        json.dumps(
+            anomaly_calibration,
+            indent=2,
+        )
     )
 
     joblib.dump(
@@ -185,6 +232,22 @@ def train():
             target_names=encoder.classes_,
             zero_division=0,
         )
+    )
+
+    print(
+        f"Isolation Forest calibration:"
+    )
+
+    print(
+        f"  low_score  = {low_score:.6f}"
+    )
+
+    print(
+        f"  high_score = {high_score:.6f}"
+    )
+
+    print(
+        f"Saved anomaly calibration to {calibration_path}"
     )
 
     print(
