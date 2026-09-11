@@ -1,14 +1,30 @@
 import random
 import time
 
-from src.detection.detection_engine import (
-    analyze_and_record_flow,
-)
+from src.detection.detection_engine import analyze_and_record_flow
 
 
 NORMAL_IPS = [
-    f"192.168.1.{i}"
-    for i in range(10, 30)
+    "192.168.1.10",
+    "192.168.1.11",
+    "192.168.1.12",
+    "192.168.1.13",
+    "192.168.1.14",
+    "192.168.1.15",
+    "192.168.1.16",
+    "192.168.1.17",
+    "192.168.1.18",
+    "192.168.1.19",
+    "192.168.1.20",
+    "192.168.1.21",
+    "192.168.1.22",
+    "192.168.1.23",
+    "192.168.1.24",
+    "192.168.1.25",
+    "192.168.1.26",
+    "192.168.1.27",
+    "192.168.1.28",
+    "192.168.1.29",
 ]
 
 ATTACKER_IPS = [
@@ -21,57 +37,53 @@ ATTACKER_IPS = [
 TARGET_SERVER = "192.168.1.100"
 
 
-def create_synthetic_flow(
-    flow_type="Normal",
-    source_ip=None,
-):
-
+def create_synthetic_flow(flow_type="Normal", source_ip=None):
     if flow_type == "Normal":
+        src_ip = source_ip or random.choice(NORMAL_IPS)
 
-        src_ip = source_ip or random.choice(
-            NORMAL_IPS
+        duration = random.uniform(1.0, 15.0)
+
+        packets_per_sec_target = random.lognormvariate(2.0, 0.8)
+        packets_per_sec_target = min(
+            packets_per_sec_target,
+            250.0,
         )
 
-        duration = random.uniform(
-            0.1,
-            15.0,
-        )
-
-        packets = random.randint(
+        packets = max(
             5,
-            120,
+            int(packets_per_sec_target * duration),
         )
 
-        bytes_count = (
-            packets
-            * random.randint(
-                64,
-                1400,
-            )
+        packets = min(
+            packets,
+            119,
         )
 
-        dst_port = random.choice(
-            [
-                80,
-                443,
-                53,
-                22,
-                8080,
-            ]
+        bytes_count = packets * random.randint(
+            64,
+            1400,
         )
 
-        protocol = random.choice(
-            [
-                "TCP",
-                "UDP",
-            ]
+        dst_port = random.choice([
+            80,
+            443,
+            53,
+            22,
+            8080,
+        ])
+
+        source_port = random.randint(
+            1024,
+            65535,
         )
+
+        protocol = random.choice([
+            "TCP",
+            "UDP",
+        ])
 
     elif flow_type == "DDoS":
-
-        src_ip = source_ip or random.choice(
-            ATTACKER_IPS
-        )
+        src_ip = source_ip or random.choice(ATTACKER_IPS)
 
         duration = random.uniform(
             0.01,
@@ -83,28 +95,25 @@ def create_synthetic_flow(
             10000,
         )
 
-        bytes_count = (
-            packets
-            * random.randint(
-                40,
-                120,
-            )
+        bytes_count = packets * random.randint(
+            40,
+            120,
         )
 
-        dst_port = random.choice(
-            [
-                80,
-                443,
-            ]
+        dst_port = random.choice([
+            80,
+            443,
+        ])
+
+        source_port = random.randint(
+            1024,
+            65535,
         )
 
         protocol = "TCP"
 
     elif flow_type == "Port Scan":
-
-        src_ip = source_ip or random.choice(
-            ATTACKER_IPS
-        )
+        src_ip = source_ip or random.choice(ATTACKER_IPS)
 
         duration = random.uniform(
             0.001,
@@ -116,12 +125,9 @@ def create_synthetic_flow(
             4,
         )
 
-        bytes_count = (
-            packets
-            * random.randint(
-                40,
-                80,
-            )
+        bytes_count = packets * random.randint(
+            40,
+            80,
         )
 
         dst_port = random.randint(
@@ -129,17 +135,19 @@ def create_synthetic_flow(
             65535,
         )
 
+        source_port = random.randint(
+            1024,
+            65535,
+        )
+
         protocol = "TCP"
 
     elif flow_type == "Brute Force":
-
-        src_ip = source_ip or random.choice(
-            ATTACKER_IPS
-        )
+        src_ip = source_ip or random.choice(ATTACKER_IPS)
 
         duration = random.uniform(
-            2.0,
-            30.0,
+            2,
+            30,
         )
 
         packets = random.randint(
@@ -147,20 +155,20 @@ def create_synthetic_flow(
             800,
         )
 
-        bytes_count = (
-            packets
-            * random.randint(
-                100,
-                300,
-            )
+        bytes_count = packets * random.randint(
+            100,
+            300,
         )
 
-        dst_port = random.choice(
-            [
-                22,
-                3389,
-                21,
-            ]
+        dst_port = random.choice([
+            21,
+            22,
+            3389,
+        ])
+
+        source_port = random.randint(
+            1024,
+            65535,
         )
 
         protocol = "TCP"
@@ -170,58 +178,49 @@ def create_synthetic_flow(
             f"Unsupported flow type: {flow_type}"
         )
 
-    packets_per_sec = (
-        packets
-        / max(
-            duration,
-            0.001,
-        )
+    packets_per_sec = packets / max(
+        duration,
+        0.001,
     )
 
-    bytes_per_sec = (
-        bytes_count
-        / max(
-            duration,
-            0.001,
-        )
+    bytes_per_sec = bytes_count / max(
+        duration,
+        0.001,
     )
+
+    protocol_tcp = 1 if protocol == "TCP" else 0
 
     return {
         "source_ip": src_ip,
         "destination_ip": TARGET_SERVER,
-        "source_port": random.randint(
-            1024,
-            65535,
-        ),
+        "source_port": source_port,
         "destination_port": dst_port,
         "protocol": protocol,
+        "protocol_tcp": protocol_tcp,
         "duration": duration,
         "packet_count": packets,
         "byte_count": bytes_count,
         "packets_per_sec": packets_per_sec,
         "bytes_per_sec": bytes_per_sec,
-        "protocol_tcp": int(
-            protocol == "TCP"
-        ),
     }
 
 
 def run_attack_burst(
     flow_type,
-    count=10,
+    count=5,
+    source_ip=None,
+    delay=0.2,
 ):
+    results = []
 
-    source_ip = random.choice(
+    attacker_ip = source_ip or random.choice(
         ATTACKER_IPS
     )
 
-    results = []
-
     for _ in range(count):
-
         flow = create_synthetic_flow(
             flow_type,
-            source_ip=source_ip,
+            source_ip=attacker_ip,
         )
 
         result = analyze_and_record_flow(
@@ -230,17 +229,16 @@ def run_attack_burst(
 
         results.append(result)
 
+        if delay > 0:
+            time.sleep(delay)
+
     return results
 
 
 def run_traffic_stream(
-    delay=1.0,
+    count=50,
+    delay=0.5,
 ):
-
-    print(
-        "[*] Starting AI Sentinel traffic stream."
-    )
-
     flow_types = [
         "Normal",
         "DDoS",
@@ -255,11 +253,13 @@ def run_traffic_stream(
         0.10,
     ]
 
-    while True:
+    results = []
 
+    for _ in range(count):
         flow_type = random.choices(
             flow_types,
             weights=weights,
+            k=1,
         )[0]
 
         flow = create_synthetic_flow(
@@ -270,19 +270,9 @@ def run_traffic_stream(
             flow
         )
 
-        print(
-            f"[{result['severity']}] "
-            f"{result['source_ip']} -> "
-            f"{result['prediction']} | "
-            f"Risk={result['risk_score']} | "
-            f"Action={result['action']} | "
-            f"Incident={result['incident_id']}"
-        )
+        results.append(result)
 
-        time.sleep(delay)
+        if delay > 0:
+            time.sleep(delay)
 
-
-if __name__ == "__main__":
-    run_traffic_stream(
-        delay=1.5
-    )
+    return results

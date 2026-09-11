@@ -89,8 +89,9 @@ def _calculate_history_score(source_ip: str) -> float:
             MAX(risk_score) AS max_risk
         FROM flow_events
         WHERE source_ip=?
-          AND risk_score>=35
-          AND datetime(timestamp) >= datetime('now', '-10 minutes')
+        AND risk_score>=35
+        AND ml_prediction!='Normal'
+        AND datetime(timestamp) >= datetime('now', '-10 minutes')
         """,
         (source_ip,),
     ).fetchone()

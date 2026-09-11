@@ -1,5 +1,7 @@
 {
-  "low_score": -0.6271300078276658,
-  "high_score": -0.39926020263893347,
-  "normal_false_positive_percentile": 2.5
+  "low_score": -0.6261537202615004,
+  "high_score": -0.3988883051789054,
+  "normal_false_positive_percentile": 2.5,
+  "calibration_samples": 15529,
+  "calibration_method": "normal_train_percentiles"
 }
