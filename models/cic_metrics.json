@@ -1,0 +1,54 @@
+{
+  "dataset": "CIC-IDS2017",
+  "evaluation_type": "CIC_holdout",
+  "sample_count": 2573488,
+  "accuracy": 0.9989178119984923,
+  "macro_precision": 0.9962230696804263,
+  "macro_recall": 0.9756625869757728,
+  "macro_f1": 0.985438361421161,
+  "classes": [
+    "Brute Force",
+    "DDoS",
+    "Normal",
+    "Port Scan"
+  ],
+  "per_class": {
+    "Brute Force": {
+      "precision": 0.9921372408863474,
+      "recall": 0.9048239895697523,
+      "f1-score": 0.9464711899079441,
+      "support": 3068.0
+    },
+    "DDoS": {
+      "precision": 0.9994918301931045,
+      "recall": 0.9985940246045695,
+      "f1-score": 0.9990427256920702,
+      "support": 25605.0
+    },
+    "Normal": {
+      "precision": 0.9992737260494658,
+      "recall": 0.9995157001215152,
+      "f1-score": 0.9993946984387622,
+      "support": 454264.0
+    },
+    "Port Scan": {
+      "precision": 0.9939894815927873,
+      "recall": 0.9997166336072542,
+      "f1-score": 0.9968448316458677,
+      "support": 31761.0
+    },
+    "accuracy": 0.9989178119984923,
+    "macro avg": {
+      "precision": 0.9962230696804263,
+      "recall": 0.9756625869757728,
+      "f1-score": 0.985438361421161,
+      "support": 514698.0
+    },
+    "weighted avg": {
+      "precision": 0.9989159568953772,
+      "recall": 0.9989178119984923,
+      "f1-score": 0.9989043761418799,
+      "support": 514698.0
+    }
+  }
+}

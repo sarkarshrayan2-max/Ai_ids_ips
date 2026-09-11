@@ -20,20 +20,35 @@ from src.security.ips_controller import IPSController
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_DIR = ROOT / "models"
 
-xgb = joblib.load(
-    MODEL_DIR / "xgboost_model.pkl"
-)
+MODEL_NAME = "synthetic"
+
+if MODEL_NAME == "cic":
+    xgb = joblib.load(
+        MODEL_DIR / "cic_xgboost_model.pkl"
+    )
+
+    scaler = joblib.load(
+        MODEL_DIR / "cic_scaler.pkl"
+    )
+
+    label_encoder = joblib.load(
+        MODEL_DIR / "cic_label_encoder.pkl"
+    )
+else:
+    xgb = joblib.load(
+        MODEL_DIR / "xgboost_model.pkl"
+    )
+
+    scaler = joblib.load(
+        MODEL_DIR / "scaler.pkl"
+    )
+
+    label_encoder = joblib.load(
+        MODEL_DIR / "label_encoder.pkl"
+    )
 
 iso_forest = joblib.load(
     MODEL_DIR / "isolation_forest.pkl"
-)
-
-scaler = joblib.load(
-    MODEL_DIR / "scaler.pkl"
-)
-
-label_encoder = joblib.load(
-    MODEL_DIR / "label_encoder.pkl"
 )
 
 CALIBRATION_PATH = MODEL_DIR / "anomaly_calibration.json"
