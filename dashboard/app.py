@@ -1,172 +1,828 @@
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.capture.traffic_generator import create_synthetic_flow
-from src.database.db import get_connection
-from src.detection.detection_engine import analyze_and_record_flow
-from src.detection.explainability import explain_flow
+from src.capture.traffic_generator import (
+    create_synthetic_flow,
+    run_attack_burst,
+)
 
-st.set_page_config(page_title="AI Hybrid IDS/IPS", layout="wide", initial_sidebar_state="expanded")
+from src.database.db import (
+    get_connection,
+    init_db,
+)
 
-st.markdown("""
-<style>
-    /* Minimize margins and padding for no-scroll single-screen view */
+from src.detection.detection_engine import (
+    analyze_and_record_flow,
+)
+
+from src.detection.explainability import (
+    explain_flow,
+)
+
+from src.detection.incident_engine import (
+    close_incident,
+)
+
+from src.security.ips_controller import (
+    IPSController,
+)
+
+
+
+init_db()
+
+st.set_page_config(
+    page_title="AI Sentinel | SOC",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+st.markdown(
+    """
+    <style>
+
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-        max-width: 100% !important;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        max-width: 100%;
     }
-    header, footer {visibility: hidden !important;}
-    h1, h2, h3, h4, h5, h6 {
-        margin-top: 0.1rem !important;
-        margin-bottom: 0.3rem !important;
-        padding: 0 !important;
+
+    footer {
+        visibility: hidden;
     }
+
     [data-testid="stMetricValue"] {
-        font-size: 1.5rem !important;
+        font-size: 1.55rem;
     }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.8rem !important;
-    }
-    .metric-container {
-        background-color: #1a1c24;
-        border-radius: 6px;
-        padding: 6px 12px;
-        border: 1px solid #2e3440;
-    }
-    .stSelectbox, .stButton {
-        margin-bottom: 0px !important;
-    }
-    div[data-testid="stExpander"] {
-        margin-top: 0.2rem !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def inject_single(kind):
+
+    flow = create_synthetic_flow(
+        kind
+    )
+
+    result = analyze_and_record_flow(
+        flow
+    )
+
+    st.session_state[
+        "last_result"
+    ] = result
+
+    st.rerun()
+
+
+def inject_burst(kind, count):
+
+    results = run_attack_burst(
+        kind,
+        count,
+    )
+
+    if results:
+        st.session_state[
+            "last_result"
+        ] = results[-1]
+
+    st.rerun()
+
+
+def clear_database():
+
+    conn = get_connection()
+
+    conn.execute(
+        "DELETE FROM flow_events"
+    )
+
+    conn.execute(
+        "DELETE FROM incidents"
+    )
+
+    conn.execute(
+        "DELETE FROM blocked_sources"
+    )
+
+    conn.commit()
+    conn.close()
+
 
 with st.sidebar:
-    st.subheader("🕹️ Simulation Controls")
-    
-    col_b1, col_b2 = st.columns(2)
-    if col_b1.button("Normal", use_container_width=True):
-        flow = create_synthetic_flow("Normal")
-        analyze_and_record_flow(flow)
+
+    st.header(
+        "Attack Simulator"
+    )
+
+    st.caption(
+        "Safe simulation mode. "
+        "No host firewall changes are made."
+    )
+
+    st.subheader(
+        "Single Event"
+    )
+
+    for kind in [
+        "Normal",
+        "DDoS",
+        "Port Scan",
+        "Brute Force",
+    ]:
+
+        if st.button(
+            kind,
+            use_container_width=True,
+        ):
+            inject_single(kind)
+
+    st.divider()
+
+    st.subheader(
+        "Attack Burst"
+    )
+
+    burst_kind = st.selectbox(
+        "Attack Type",
+        [
+            "DDoS",
+            "Port Scan",
+            "Brute Force",
+        ],
+    )
+
+    burst_count = st.slider(
+        "Number of flows",
+        min_value=1,
+        max_value=30,
+        value=10,
+    )
+
+    if st.button(
+        "Run Attack Burst",
+        use_container_width=True,
+    ):
+        inject_burst(
+            burst_kind,
+            burst_count,
+        )
+
+    st.divider()
+
+    if st.button(
+        "Clear SOC Data",
+        use_container_width=True,
+    ):
+
+        clear_database()
+
+        st.session_state.pop(
+            "last_result",
+            None,
+        )
+
         st.rerun()
 
-    if col_b2.button("DDoS", use_container_width=True):
-        flow = create_synthetic_flow("DDoS")
-        analyze_and_record_flow(flow)
-        st.rerun()
-
-    col_b3, col_b4 = st.columns(2)
-    if col_b3.button("Port Scan", use_container_width=True):
-        flow = create_synthetic_flow("Port Scan")
-        analyze_and_record_flow(flow)
-        st.rerun()
-
-    if col_b4.button("Brute Force", use_container_width=True):
-        flow = create_synthetic_flow("Brute Force")
-        analyze_and_record_flow(flow)
-        st.rerun()
-
-    st.markdown("---")
-    if st.button("🧹 Clear Logs", use_container_width=True):
-        conn = get_connection()
-        conn.execute("DELETE FROM flow_events")
-        conn.execute("DELETE FROM blocked_sources")
-        conn.commit()
-        conn.close()
-        st.rerun()
 
 conn = get_connection()
-df_flows = pd.read_sql_query("SELECT * FROM flow_events ORDER BY id DESC LIMIT 50", conn)
-df_blocked = pd.read_sql_query("SELECT * FROM blocked_sources ORDER BY id DESC LIMIT 20", conn)
+
+all_flows = pd.read_sql_query(
+    """
+    SELECT *
+    FROM flow_events
+    ORDER BY id DESC
+    """,
+    conn,
+)
+
+flows = all_flows.head(150)
+
+
+blocked = pd.read_sql_query(
+    """
+    SELECT *
+    FROM blocked_sources
+    WHERE status='BLOCKED'
+    ORDER BY risk_score DESC
+    """,
+    conn,
+)
+
+
+incidents = pd.read_sql_query(
+    """
+    SELECT *
+    FROM incidents
+    ORDER BY
+        CASE status
+            WHEN 'OPEN' THEN 0
+            ELSE 1
+        END,
+        last_seen DESC
+    LIMIT 50
+    """,
+    conn,
+)
+
 conn.close()
 
-st.markdown("### 🛡️ AI-Powered Hybrid IDS/IPS Console")
 
-total_flows = len(df_flows)
-threats = len(df_flows[df_flows["ml_prediction"] != "Normal"]) if total_flows > 0 else 0
-anomalies = len(df_flows[df_flows["anomaly_score"] >= 0.5]) if total_flows > 0 else 0
-blocked_count = len(df_blocked)
+st.title(
+    "AI Sentinel"
+)
 
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Flows Analyzed", total_flows)
-m2.metric("Threats Flagged", threats)
-m3.metric("Anomalies Detected", anomalies)
-m4.metric("Active Blocklist", blocked_count)
-
-st.markdown("<hr style='margin: 0.4rem 0;'>", unsafe_allow_html=True)
-
-col_main_left, col_main_right = st.columns([1.3, 1.0], gap="medium")
-
-with col_main_left:
-    st.markdown("##### 📡 Live Network Flows (Latest 50)")
-    if not df_flows.empty:
-        display_cols = [
-            "id", "source_ip", "destination_port", "protocol",
-            "ml_prediction", "risk_score", "severity", "action"
-        ]
-        def highlight_severity(val):
-            if val == "CRITICAL":
-                return "background-color: #8b0000; color: white"
-            elif val == "HIGH":
-                return "background-color: #b35900; color: white"
-            elif val == "MEDIUM":
-                return "background-color: #737300; color: white"
-            elif val == "LOW":
-                return "background-color: #005926; color: white"
-            return ""
-
-        styled_df = df_flows[display_cols].style.map(highlight_severity, subset=["severity"])
-        st.dataframe(styled_df, height=210, use_container_width=True)
-    else:
-        st.info("No flow data. Inject traffic via the sidebar.", icon="ℹ️")
-
-    st.markdown("##### 🚫 Automated IPS Quarantine List")
-    if not df_blocked.empty:
-        st.dataframe(df_blocked[["id", "source_ip", "reason", "risk_score", "blocked_at", "status"]], height=130, use_container_width=True)
-    else:
-        st.caption("No sources currently quarantined.")
+st.caption(
+    "Hybrid AI Intrusion Detection "
+    "and Prevention System"
+)
 
 
-with col_main_right:
-   
-    st.markdown("##### 📊 Threat Profile")
-    if not df_flows.empty and threats > 0:
-        attack_counts = df_flows[df_flows["ml_prediction"] != "Normal"]["ml_prediction"].value_counts().reset_index()
-        attack_counts.columns = ["Attack Type", "Count"]
-        fig = px.pie(
-            attack_counts, names="Attack Type", values="Count", hole=0.5,
-            color_discrete_sequence=px.colors.sequential.RdBu
+if all_flows.empty:
+
+    threats = 0
+    critical = 0
+    anomalies = 0
+    avg_risk = 0
+
+else:
+
+    threats = int(
+        (
+            all_flows[
+                "ml_prediction"
+            ] != "Normal"
+        ).sum()
+    )
+
+    critical = int(
+        (
+            all_flows[
+                "severity"
+            ] == "CRITICAL"
+        ).sum()
+    )
+
+    anomalies = int(
+        (
+            all_flows[
+                "anomaly_score"
+            ] >= 0.5
+        ).sum()
+    )
+
+    avg_risk = float(
+        all_flows[
+            "risk_score"
+        ].mean()
+    )
+
+
+open_incidents = (
+    int(
+        (
+            incidents[
+                "status"
+            ] == "OPEN"
+        ).sum()
+    )
+    if not incidents.empty
+    else 0
+)
+
+
+blocked_count = (
+    len(blocked)
+)
+
+
+metrics = st.columns(6)
+
+metrics[0].metric(
+    "Flows",
+    len(all_flows),
+)
+
+metrics[1].metric(
+    "Threats",
+    threats,
+)
+
+metrics[2].metric(
+    "Anomalies",
+    anomalies,
+)
+
+metrics[3].metric(
+    "Critical",
+    critical,
+)
+
+metrics[4].metric(
+    "Open Incidents",
+    open_incidents,
+)
+
+metrics[5].metric(
+    "Blocked Sources",
+    blocked_count,
+)
+
+
+st.divider()
+
+
+left, right = st.columns(
+    [1.4, 1]
+)
+
+
+with left:
+
+    st.subheader(
+        "Live Threat Timeline"
+    )
+
+    if not flows.empty:
+
+        timeline = (
+            flows
+            .sort_values("id")
         )
+
+        fig = px.scatter(
+            timeline,
+            x="timestamp",
+            y="risk_score",
+            color="severity",
+            symbol="ml_prediction",
+            hover_data=[
+                "source_ip",
+                "destination_port",
+                "action",
+                "incident_id",
+            ],
+            range_y=[
+                0,
+                100,
+            ],
+        )
+
+        fig.add_hline(
+            y=85,
+            line_dash="dash",
+            annotation_text="AUTO-BLOCK",
+        )
+
+        fig.add_hline(
+            y=65,
+            line_dash="dot",
+            annotation_text="HIGH RISK",
+        )
+
         fig.update_layout(
-            margin=dict(t=5, b=5, l=10, r=10),
-            height=140,
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
+            height=380,
+            margin=dict(
+                l=10,
+                r=10,
+                t=20,
+                b=10,
+            ),
+            legend_title_text="",
         )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.caption("Clean traffic baseline. No active attacks detected.")
 
-    st.markdown("##### 🔍 Forensics & Explainability Inspector")
-    if not df_flows.empty:
-        selected_id = st.selectbox("Inspect Event ID:", df_flows["id"].tolist(), label_visibility="collapsed")
-        flow_row = df_flows[df_flows["id"] == selected_id].iloc[0].to_dict()
-        
-        info_col1, info_col2 = st.columns(2)
-        with info_col1:
-            st.markdown(f"**Class:** `{flow_row['ml_prediction']}` ({flow_row['ml_confidence']*100:.0f}%)")
-            st.markdown(f"**Anomaly:** `{flow_row['anomaly_score']:.2f}`")
-        with info_col2:
-            st.markdown(f"**Risk Score:** `{flow_row['risk_score']}/100`")
-            st.markdown(f"**Action:** `{flow_row['action']}`")
-            
-        explanations = explain_flow(flow_row)
-        for exp in explanations[:3]:
-            st.markdown(f"<small>{exp}</small>", unsafe_allow_html=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
+
     else:
-        st.caption("Generate events to view model explanations.")
+
+        st.info(
+            "Run an attack scenario "
+            "from the sidebar."
+        )
+
+
+with right:
+
+    st.subheader(
+        "Threat Distribution"
+    )
+
+    if threats:
+
+        counts = (
+            all_flows[
+                all_flows[
+                    "ml_prediction"
+                ] != "Normal"
+            ][
+                "ml_prediction"
+            ]
+            .value_counts()
+            .rename_axis("Attack")
+            .reset_index(
+                name="Count"
+            )
+        )
+
+        fig = px.pie(
+            counts,
+            names="Attack",
+            values="Count",
+            hole=0.55,
+        )
+
+        fig.update_layout(
+            height=380,
+            margin=dict(
+                l=10,
+                r=10,
+                t=20,
+                b=10,
+            ),
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
+
+    else:
+
+        st.info(
+            "No threats detected."
+        )
+
+
+st.subheader(
+    "Risk Distribution"
+)
+
+if not flows.empty:
+
+    fig = px.histogram(
+        flows,
+        x="risk_score",
+        nbins=20,
+        range_x=[
+            0,
+            100,
+        ],
+    )
+
+    fig.update_layout(
+        height=280,
+        margin=dict(
+            l=10,
+            r=10,
+            t=10,
+            b=10,
+        ),
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+    )
+
+
+st.subheader(
+    "Active Incidents"
+)
+
+
+if not incidents.empty:
+
+    incident_display = incidents.copy()
+
+    incident_display[
+        "attack_types"
+    ] = (
+        incident_display[
+            "attack_types"
+        ]
+        .fillna("[]")
+        .map(
+            lambda value:
+                " → ".join(
+                    json.loads(value)
+                )
+        )
+    )
+
+    incident_display = (
+        incident_display.rename(
+            columns={
+                "incident_id": "Incident",
+                "source_ip": "Source",
+                "attack_types": "Attack Chain",
+                "event_count": "Events",
+                "max_risk": "Risk",
+                "first_seen": "First Seen",
+                "last_seen": "Last Seen",
+                "status": "Status",
+                "action": "Action",
+            }
+        )
+    )
+
+    st.dataframe(
+        incident_display[
+            [
+                "Incident",
+                "Source",
+                "Attack Chain",
+                "Events",
+                "Risk",
+                "Status",
+                "Action",
+                "First Seen",
+                "Last Seen",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+else:
+
+    st.caption(
+        "No incidents currently correlated."
+    )
+
+
+st.divider()
+
+
+events_col, inspector_col = st.columns(
+    [1.35, 1]
+)
+
+
+with events_col:
+
+    st.subheader(
+        "Recent Network Events"
+    )
+
+    if not flows.empty:
+
+        event_columns = [
+            "id",
+            "timestamp",
+            "source_ip",
+            "destination_port",
+            "ml_prediction",
+            "ml_confidence",
+            "anomaly_score",
+            "behavior_score",
+            "history_score",
+            "risk_score",
+            "severity",
+            "action",
+            "incident_id",
+        ]
+
+        st.dataframe(
+            flows[
+                event_columns
+            ],
+            use_container_width=True,
+            height=400,
+            hide_index=True,
+        )
+
+    else:
+
+        st.caption(
+            "No network events."
+        )
+
+
+with inspector_col:
+
+    st.subheader(
+        "AI Decision Inspector"
+    )
+
+    if not flows.empty:
+
+        selected_event = st.selectbox(
+            "Select Event",
+            flows["id"].tolist(),
+        )
+
+        selected = (
+            flows[
+                flows["id"]
+                == selected_event
+            ]
+            .iloc[0]
+            .to_dict()
+        )
+
+        st.metric(
+            "Risk Score",
+            f"{selected['risk_score']}/100",
+            selected["severity"],
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            "XGBoost",
+            f"{selected['ml_confidence'] * 100:.0f}%",
+        )
+
+        c2.metric(
+            "Anomaly",
+            f"{selected['anomaly_score']:.2f}",
+        )
+
+        c3.metric(
+            "Behavior",
+            f"{selected['behavior_score']:.2f}",
+        )
+
+        c4, c5 = st.columns(2)
+
+        c4.metric(
+            "History",
+            f"{selected['history_score']:.2f}",
+        )
+
+        c5.metric(
+            "Prediction",
+            selected["ml_prediction"],
+        )
+
+        st.markdown(
+            f"**Action:** `{selected['action']}`"
+        )
+
+        st.markdown(
+            f"**Incident:** "
+            f"`{selected.get('incident_id') or 'None'}`"
+        )
+
+        st.markdown(
+            "**Detection Evidence**"
+        )
+
+        for reason in explain_flow(
+            selected
+        ):
+
+            st.write(
+                f"• {reason}"
+            )
+
+    else:
+
+        st.caption(
+            "Select an event after "
+            "running traffic."
+        )
+
+
+st.subheader(
+    "IPS Quarantine"
+)
+
+if not blocked.empty:
+
+    st.dataframe(
+        blocked[
+            [
+                "source_ip",
+                "reason",
+                "risk_score",
+                "blocked_at",
+                "status",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+else:
+
+    st.caption(
+        "No sources are currently blocked."
+    )
+
+
+with st.expander(
+    "Model Validation"
+):
+
+    metrics_path = (
+        ROOT
+        / "models"
+        / "metrics.json"
+    )
+
+    if metrics_path.exists():
+
+        model_metrics = json.loads(
+            metrics_path.read_text()
+        )
+
+        a, b, c, d = st.columns(4)
+
+        a.metric(
+            "Accuracy",
+            f"{model_metrics['accuracy'] * 100:.1f}%",
+        )
+
+        b.metric(
+            "Precision",
+            f"{model_metrics['macro_precision'] * 100:.1f}%",
+        )
+
+        c.metric(
+            "Recall",
+            f"{model_metrics['macro_recall'] * 100:.1f}%",
+        )
+
+        d.metric(
+            "Macro F1",
+            f"{model_metrics['macro_f1'] * 100:.1f}%",
+        )
+
+        st.warning(
+            "These metrics are from the synthetic "
+            "hold-out dataset. Real-world IDS performance "
+            "must be evaluated separately."
+        )
+
+    else:
+
+        st.warning(
+            "Model metrics are unavailable. "
+            "Run the training pipeline."
+        )
+
+
+if st.session_state.get(
+    "last_result"
+):
+
+    with st.expander(
+        "Latest Detection Result",
+        expanded=True,
+    ):
+
+        result = st.session_state[
+            "last_result"
+        ]
+
+        st.write(
+            f"**{result['prediction']}** | "
+            f"Risk **{result['risk_score']}/100** | "
+            f"Action **{result['action']}**"
+        )
+
+        if result.get(
+            "incident_id"
+        ):
+
+            st.write(
+                f"Incident: "
+                f"`{result['incident_id']}`"
+            )
+
+        if result.get(
+            "block_result"
+        ):
+
+            st.write(
+                f"IPS: "
+                f"`{result['block_result']}`"
+            )
+
+        for explanation in result.get(
+            "explanation",
+            [],
+        ):
+
+            st.write(
+                f"• {explanation}"
+            )

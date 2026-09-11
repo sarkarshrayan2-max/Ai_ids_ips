@@ -1,0 +1,48 @@
+{
+  "dataset": "synthetic_flow_dataset",
+  "evaluation_type": "synthetic_holdout",
+  "sample_count": 30000,
+  "accuracy": 0.9998333333333334,
+  "macro_precision": 0.9999356167911408,
+  "macro_recall": 0.9995784148397977,
+  "macro_f1": 0.999756833785704,
+  "per_class": {
+    "Brute Force": {
+      "precision": 1.0,
+      "recall": 0.9983136593591906,
+      "f1-score": 0.99915611814346,
+      "support": 593.0
+    },
+    "DDoS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 921.0
+    },
+    "Normal": {
+      "precision": 0.9997424671645635,
+      "recall": 1.0,
+      "f1-score": 0.9998712169993561,
+      "support": 3882.0
+    },
+    "Port Scan": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 604.0
+    },
+    "accuracy": 0.9998333333333334,
+    "macro avg": {
+      "precision": 0.9999356167911408,
+      "recall": 0.9995784148397977,
+      "f1-score": 0.999756833785704,
+      "support": 6000.0
+    },
+    "weighted avg": {
+      "precision": 0.9998333762554725,
+      "recall": 0.9998333333333334,
+      "f1-score": 0.9998332737417619,
+      "support": 6000.0
+    }
+  }
+}

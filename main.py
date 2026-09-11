@@ -1,5 +1,13 @@
+from src.database.db import init_db
+
+
 def main():
-    print("Hello from ai-ids-ips!")
+
+    init_db()
+
+    print(
+        "AI Sentinel IDS/IPS initialized."
+    )
 
 
 if __name__ == "__main__":

@@ -1,60 +1,196 @@
+from pathlib import Path
+import json
+
 import joblib
 import pandas as pd
+
 from sklearn.ensemble import IsolationForest
-from sklearn.metrics import classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import (
+    LabelEncoder,
+    StandardScaler,
+)
+
 from xgboost import XGBClassifier
 
-def train():
-    df = pd.read_csv("data/sample/flow_dataset.csv")
-    
-    features = [
-        "destination_port", "duration", "packet_count", 
-        "byte_count", "packets_per_sec", "bytes_per_sec", "protocol_tcp"
-    ]
-    
-    X = df[features]
-    y = df["label"]
-    
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
-    )
-    
-    print("Training XGBoost Classifier...")
-    xgb = XGBClassifier(
-        n_estimators=100,
-        max_depth=6,
-        learning_rate=0.1,
-        eval_metric="mlogloss",
-        random_state=42
-    )
-    xgb.fit(X_train, y_train)
-    
-    y_pred = xgb.predict(X_test)
-    print("\n--- Model Evaluation (XGBoost) ---")
-    print(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
 
-    print("Training Isolation Forest on Normal baseline...")
-    normal_indices = (y_train == label_encoder.transform(["Normal"])[0])
-    X_normal_train = X_train[normal_indices]
-    
-    iso_forest = IsolationForest(
-        n_estimators=100,
-        contamination=0.03,
-        random_state=42
+ROOT = Path(__file__).resolve().parents[2]
+
+DATA = (
+    ROOT
+    / "data"
+    / "sample"
+    / "flow_dataset.csv"
+)
+
+MODEL_DIR = ROOT / "models"
+
+
+FEATURES = [
+    "destination_port",
+    "duration",
+    "packet_count",
+    "byte_count",
+    "packets_per_sec",
+    "bytes_per_sec",
+    "protocol_tcp",
+]
+
+
+def train():
+
+    MODEL_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
     )
-    iso_forest.fit(X_normal_train)
-    joblib.dump(xgb, "models/xgboost_model.pkl")
-    joblib.dump(iso_forest, "models/isolation_forest.pkl")
-    joblib.dump(scaler, "models/scaler.pkl")
-    joblib.dump(label_encoder, "models/label_encoder.pkl")
-    print("\n[+] All models and artifacts saved to models/")
+
+    df = pd.read_csv(DATA)
+
+    X = df[FEATURES]
+    y = df["label"]
+
+    encoder = LabelEncoder()
+
+    y_encoded = encoder.fit_transform(y)
+
+    scaler = StandardScaler()
+
+    X_scaled = scaler.fit_transform(X)
+
+    (
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+    ) = train_test_split(
+        X_scaled,
+        y_encoded,
+        test_size=0.2,
+        random_state=42,
+        stratify=y_encoded,
+    )
+
+    model = XGBClassifier(
+        n_estimators=220,
+        max_depth=6,
+        learning_rate=0.06,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        eval_metric="mlogloss",
+        random_state=42,
+    )
+
+    model.fit(
+        X_train,
+        y_train,
+    )
+
+    predictions = model.predict(
+        X_test
+    )
+
+    report = classification_report(
+        y_test,
+        predictions,
+        target_names=encoder.classes_,
+        output_dict=True,
+        zero_division=0,
+    )
+
+    metrics = {
+        "dataset": "synthetic_flow_dataset",
+        "evaluation_type": "synthetic_holdout",
+        "sample_count": len(df),
+        "accuracy": accuracy_score(
+            y_test,
+            predictions,
+        ),
+        "macro_precision": precision_score(
+            y_test,
+            predictions,
+            average="macro",
+            zero_division=0,
+        ),
+        "macro_recall": recall_score(
+            y_test,
+            predictions,
+            average="macro",
+            zero_division=0,
+        ),
+        "macro_f1": f1_score(
+            y_test,
+            predictions,
+            average="macro",
+            zero_division=0,
+        ),
+        "per_class": report,
+    }
+
+    normal_id = encoder.transform(
+        ["Normal"]
+    )[0]
+
+    isolation_forest = IsolationForest(
+        n_estimators=180,
+        contamination=0.03,
+        random_state=42,
+    )
+
+    isolation_forest.fit(
+        X_train[
+            y_train == normal_id
+        ]
+    )
+
+    joblib.dump(
+        model,
+        MODEL_DIR / "xgboost_model.pkl",
+    )
+
+    joblib.dump(
+        isolation_forest,
+        MODEL_DIR / "isolation_forest.pkl",
+    )
+
+    joblib.dump(
+        scaler,
+        MODEL_DIR / "scaler.pkl",
+    )
+
+    joblib.dump(
+        encoder,
+        MODEL_DIR / "label_encoder.pkl",
+    )
+
+    (
+        MODEL_DIR / "metrics.json"
+    ).write_text(
+        json.dumps(
+            metrics,
+            indent=2,
+        )
+    )
+
+    print(
+        classification_report(
+            y_test,
+            predictions,
+            target_names=encoder.classes_,
+            zero_division=0,
+        )
+    )
+
+    print(
+        f"Saved model artifacts to {MODEL_DIR}"
+    )
+
 
 if __name__ == "__main__":
     train()

@@ -1,30 +1,110 @@
 def explain_flow(flow_row: dict) -> list[str]:
+
     reasons = []
 
-    pred = flow_row.get("ml_prediction")
-    conf = flow_row.get("ml_confidence", 0)
-    if pred != "Normal":
-        reasons.append(f"🎯 **Signature Matched:** High confidence ({conf*100:.1f}%) classification as **{pred}**.")
+    prediction = flow_row.get("ml_prediction", "Normal")
 
-    pps = flow_row.get("packets_per_sec", 0)
-    if pps > 2000:
-        reasons.append(f"⚡ **Volumetric Surge:** Packet rate at **{pps:,.0f} pkts/sec** (threshold > 2,000).")
+    confidence = float(
+        flow_row.get("ml_confidence", 0)
+    )
 
-    port = flow_row.get("destination_port", 0)
-    duration = flow_row.get("duration", 0)
-    pkts = flow_row.get("packet_count", 0)
-    if pkts <= 5 and duration < 0.1 and port > 1024:
-        reasons.append(f" **Probe Pattern:** Rapid single-packet connection to port **{port}** in {duration:.4f}s.")
+    anomaly = float(
+        flow_row.get("anomaly_score", 0)
+    )
 
-    if port in [22, 3389, 21] and duration > 2.0 and pkts > 150:
-        service = {22: "SSH", 3389: "RDP", 21: "FTP"}.get(port, str(port))
-        reasons.append(f" **Credential Attempt:** Extended interaction on auth port **{port} ({service})** with {pkts} packets.")
+    behavior = float(
+        flow_row.get("behavior_score", 0)
+    )
 
-    anomaly_score = flow_row.get("anomaly_score", 0)
-    if anomaly_score >= 0.5:
-        reasons.append(f" **Statistical Outlier:** Isolation Forest anomaly score **{anomaly_score:.2f}** deviates from baseline.")
+    history = float(
+        flow_row.get("history_score", 0)
+    )
+
+    packets_per_sec = float(
+        flow_row.get("packets_per_sec", 0)
+    )
+
+    bytes_per_sec = float(
+        flow_row.get("bytes_per_sec", 0)
+    )
+
+    destination_port = int(
+        flow_row.get("destination_port", 0)
+    )
+
+    duration = float(
+        flow_row.get("duration", 0)
+    )
+
+    packet_count = int(
+        flow_row.get("packet_count", 0)
+    )
+
+    if prediction != "Normal":
+        reasons.append(
+            f"XGBoost classified the flow as {prediction} "
+            f"with {confidence * 100:.1f}% confidence."
+        )
+
+    if packets_per_sec >= 5000:
+        reasons.append(
+            f"Extreme traffic volume detected: "
+            f"{packets_per_sec:,.0f} packets/sec."
+        )
+    elif packets_per_sec >= 2000:
+        reasons.append(
+            f"High traffic volume detected: "
+            f"{packets_per_sec:,.0f} packets/sec."
+        )
+
+    if bytes_per_sec >= 5_000_000:
+        reasons.append(
+            f"High bandwidth utilization detected: "
+            f"{bytes_per_sec / 1_000_000:.2f} MB/s."
+        )
+
+    if (
+        packet_count <= 5
+        and duration < 0.1
+        and destination_port > 1024
+    ):
+        reasons.append(
+            f"Rapid reconnaissance behavior detected "
+            f"against destination port {destination_port}."
+        )
+
+    if (
+        destination_port in (21, 22, 3389)
+        and duration >= 2
+        and packet_count > 150
+    ):
+        reasons.append(
+            f"Sustained authentication-service traffic "
+            f"detected on port {destination_port}."
+        )
+
+    if anomaly >= 0.5:
+        reasons.append(
+            f"Isolation Forest identified anomalous behavior "
+            f"with score {anomaly:.2f}."
+        )
+
+    if behavior >= 0.4:
+        reasons.append(
+            f"Behavior engine produced an elevated risk score "
+            f"of {behavior:.2f}."
+        )
+
+    if history >= 0.4:
+        reasons.append(
+            f"Source history increased the threat score "
+            f"to {history:.2f}."
+        )
 
     if not reasons:
-        reasons.append(" Traffic profile conforms to standard baseline behavior.")
+        reasons.append(
+            "Traffic profile is consistent with the learned "
+            "normal baseline."
+        )
 
     return reasons
